@@ -1,6 +1,11 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
+using We80s.GameData.Table;
 using We80s.Managers;
+using We80s.Render;
+using SceneManager = We80s.Managers.SceneManager;
 
 namespace We80s.Core
 {
@@ -9,14 +14,16 @@ namespace We80s.Core
         private List<IManager> managers = new List<IManager>();
         private List<IUpdate> updatableManagers = new List<IUpdate>();
         
-        private bool allManagerLoaded;
-        public bool AllManagerLoaded => allManagerLoaded;
+        private static bool allManagerLoaded;
         
-        [SerializeField] private Camera camera;
+        [SerializeField] private GameCamera camera;
         [SerializeField] private Canvas canvas;
-        
-        public static Camera mainCamera { get; private set; }
 
+        private static GameObject miniGame;
+        public static GameCamera MainCamera { get; private set; }
+        public static Camera MiniGameCamera { get; private set; }
+        public static GameObject MiniGame => miniGame;
+        
         private void AddManager(IManager manager)
         {
             managers.Add(manager);
@@ -26,20 +33,39 @@ namespace We80s.Core
                 updatableManagers.Add(update);
             }
         }
-        
+
+        private static Action onLoaded;
+        public static Action OnLoaded
+        {
+            get => onLoaded;
+            set
+            {
+                if (allManagerLoaded)
+                {
+                    value.Invoke();
+                }
+                else
+                {
+                    onLoaded += value;
+                }
+            }
+        }
         
         private void Awake()
         {
-            mainCamera = camera;
-            managers.Add(AssetManager.Instance);
-            managers.Add(SceneManager.Instance);
-            managers.Add(UIManager.Instance);
-            managers.Add(EventManager.Instance);
-            managers.Add(ActorManager.Instance);
+            DontDestroyOnLoad(gameObject);
+            allManagerLoaded = false;
+            MainCamera = camera;
+            AddManager(AssetManager.Instance);
+            AddManager(SceneManager.Instance);
+            AddManager(UIManager.Instance);
+            AddManager(EventManager.Instance);
+            AddManager(ActorManager.Instance);
+            AddManager(TimeManager.Instance);
 
             UIManager.Instance.canvas = canvas;
 
-            AssetManager.Instance.onLoaded += (assetManager) =>
+            AssetManager.Instance.OnLoaded += (assetManager) =>
             {
                 foreach (var manager in managers)
                 {
@@ -75,6 +101,17 @@ namespace We80s.Core
             {
                 m.Start();
             }
+
+            miniGame = AssetManager.Instance.LoadObject<GameObject>(100001);
+            DontDestroyOnLoad(miniGame);
+            Camera miniGameCamera;
+            if (miniGame.transform.GetChild(0).TryGetComponent(out miniGameCamera))
+            {
+                MiniGameCamera = miniGameCamera;
+            }
+            onLoaded?.Invoke();
+
+            SceneManager.Instance.LoadScene(100000, LoadSceneMode.Single, scene => scene.NewScene());
         }
     }
 }
